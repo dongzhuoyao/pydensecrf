@@ -16,7 +16,9 @@ and provide a link to this repository as a footnote or a citation.
 Installation
 ============
 
-You can install this using `pip` by executing:
+The package is on PyPI, so simply run `pip install pydensecrf` to install it.
+
+If you want the newest and freshest version, you can install it by executing:
 
 ```
 pip install git+https://github.com/lucasb-eyer/pydensecrf.git
@@ -101,6 +103,14 @@ d.addPairwiseGaussian(sxy=3, compat=3)
 d.addPairwiseBilateral(sxy=80, srgb=13, rgbim=im, compat=10)
 ```
 
+### Non-RGB bilateral
+
+An important caveat is that `addPairwiseBilateral` only works for RGB images, i.e. three channels.
+If your data is of different type than this simple but common case, you'll need to compute your
+own pairwise energy using `utils.create_pairwise_bilateral`; see the [generic non-2D case](https://github.com/lucasb-eyer/pydensecrf#generic-non-2d) for details.
+
+A good [example of working with Non-RGB data](https://github.com/lucasb-eyer/pydensecrf/blob/master/examples/Non%20RGB%20Example.ipynb) is provided as a notebook in the examples folder.
+
 ### Compatibilities
 
 The `compat` argument can be any of the following:
@@ -109,7 +119,9 @@ The `compat` argument can be any of the following:
 - A 1D array, then a `DiagonalCompatibility` is being used.
 - A 2D array, then a `MatrixCompatibility` is being used.
 
-Compatibilities are [ways to weight contributions](https://github.com/lucasb-eyer/pydensecrf/issues/8#issuecomment-188478006).
+These are label-compatibilites `µ(xi, xj)` whose parameters could possibly be [learned](https://github.com/lucasb-eyer/pydensecrf#learning).
+For example, they could indicate that mistaking `bird` pixels for `sky` is not as bad as mistaking `cat` for `sky`.
+The arrays should have `nlabels` or `(nlabels,nlabels)` as shape and a `float32` datatype.
 
 ### Kernels
 
@@ -119,6 +131,10 @@ Possible values for the `kernel` argument are:
 - `DIAG_KERNEL` (the default)
 - `FULL_KERNEL`
 
+This specifies the kernel's precision-matrix `Λ(m)`, which could possibly be learned.
+These indicate correlations between feature types, the default implying no correlation.
+Again, this could possiblty be [learned](https://github.com/lucasb-eyer/pydensecrf#learning).
+
 ### Normalizations
 
 Possible values for the `normalization` argument are:
@@ -127,6 +143,15 @@ Possible values for the `normalization` argument are:
 - `NORMALIZE_BEFORE`
 - `NORMALIZE_AFTER`
 - `NORMALIZE_SYMMETRIC` (the default)
+
+### Kernel weight
+
+I have so far not found a way to set the kernel weights `w(m)`.
+According to the paper, `w(2)` was set to 1 and `w(1)` was cross-validated, but never specified.
+Looking through Philip's code (included in [pydensecrf/densecrf](https://github.com/lucasb-eyer/pydensecrf/tree/master/pydensecrf/densecrf)),
+I couldn't find such explicit weights, and my guess is they are thus hard-coded to 1.
+If anyone knows otherwise, please open an issue or, better yet, a pull-request.
+Update: user @waldol1 has an idea in [this issue](https://github.com/lucasb-eyer/pydensecrf/issues/37). Feel free to try it out!
 
 Inference
 ---------
@@ -200,3 +225,30 @@ Learning
 
 The learning has not been fully wrapped. If you need it, get in touch or better
 yet, wrap it and submit a pull-request!
+
+Here's a pointer for starters: issue#24. We need to wrap the gradients and getting/setting parameters.
+But then, we also need to do something with these, most likely call [minimizeLBFGS from optimization.cpp](https://github.com/lucasb-eyer/pydensecrf/blob/d824b89ee3867bca3e90b9f04c448f1b41821524/pydensecrf/densecrf/src/optimization.cpp).
+It should be relatively straightforward to just follow the learning examples included in the [original code](http://graphics.stanford.edu/projects/drf/densecrf_v_2_2.zip).
+
+Common Problems
+===============
+
+`undefined symbol` when importing
+---------------------------------
+
+If while importing pydensecrf you get an error about some undefined symbols (for example `.../pydensecrf/densecrf.so: undefined symbol: _ZTINSt8ios_base7failureB5cxx11E`), you most likely are inadvertently mixing different compilers or toolchains. Try to see what's going on using tools like `ldd`. If you're using Anaconda, [running `conda install libgcc` might be a solution](https://github.com/lucasb-eyer/pydensecrf/issues/28).
+
+Maintaining
+===========
+
+These are instructions for maintainers about how to release new versions. (Mainly instructions for myself.)
+
+```
+# Go increment the version in setup.py
+> python setup.py build_ext
+> python setup.py sdist
+> twine upload dist/pydensecrf-VERSION_NUM.tar.gz
+```
+
+And that's it. At some point, it would be cool to automate this on [TravisCI](https://docs.travis-ci.com/user/deployment/pypi/), but not worth it yet.
+At that point, looking into [creating "manylinux" wheels](https://github.com/pypa/python-manylinux-demo) might be nice, too.
